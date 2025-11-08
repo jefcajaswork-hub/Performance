@@ -1,0 +1,65 @@
+CONCLUSIONES – PRUEBA DE CARGA EN K6 (SERVICIO DE LOGIN)
+=========================================================
+
+Escenario evaluado
+------------------
+Se ejecutó una prueba de carga sobre el endpoint:
+
+   POST https://fakestoreapi.com/auth/login
+
+Utilizando credenciales parametrizadas desde el archivo usuarios.csv y control
+del ritmo de llegada mediante el ejecutor `constant-arrival-rate`, con el objetivo de:
+
+   20 transacciones por segundo (TPS) sostenidas durante 180 segundos.
+
+Este enfoque permite evaluar el comportamiento en estado estable (steady-state),
+evitando sesgos de arranque (warm-up) o picos artificiales.
+
+Parámetros de la prueba
+-----------------------
+- Método: POST
+- Duración total: 180 segundos
+- Ritmo de llegada: 20 peticiones por segundo (20 TPS)
+- Usuarios tomados de CSV (ignorando la fila de encabezado)
+- Concurrencia ajustada dinámicamente por K6 (preAllocatedVUs = 50, maxVUs = 100)
+- Validaciones configuradas (thresholds):
+  • http_req_duration: p(95) < 1500 ms
+  • http_req_failed: rate < 3%
+
+Métricas observadas
+-------------------
+- Total de solicitudes procesadas: 3601
+- Throughput logrado: ~20.00 req/s → **CUMPLE**
+- Latencia promedio: 343 ms → **CUMPLE (≤ 1500 ms)**
+- Latencia p(95): 356 ms → **CUMPLE (≤ 1500 ms)**
+- Tasa de errores (http_req_failed): 0.00% → **CUMPLE (< 3%)**
+- Respuesta exitosa validada: códigos 200/201
+
+Interpretación de resultados
+----------------------------
+1) El servicio mantuvo 20 TPS de forma sostenida sin degradación de rendimiento.
+2) Las latencias se mantuvieron bajas y estables, sin variabilidad significativa.
+3) La prueba confirma la estabilidad del backend en autenticación concurrente.
+4) La concurrencia real observada (~7–8 VUs activos) coincide con la Ley de Little:
+
+      Concurrency ≈ Throughput × ResponseTime
+      Concurrency ≈ 20 TPS × 0.34 s ≈ 6.8 usuarios simultáneos
+
+   Lo cual valida que la reserva de 50 VUs fue suficiente para asegurar ritmo constante.
+
+Recomendación de siguiente fase
+-------------------------------
+Ejecutar una **prueba de estrés progresiva**:
+
+   20 TPS → 30 TPS → 40 TPS → 60 TPS → 80 TPS → 100 TPS
+
+Monitoreando:
+- Crecimiento no lineal de latencia (señal de saturación)
+- Aumento de errores de autenticación
+- Estancamiento de throughput (cuello de botella)
+
+Conclusión
+----------
+El servicio de login **cumplió completamente los criterios de rendimiento** definidos.
+Soportó 20 TPS con baja latencia, sin errores y con comportamiento estable en todo
+el período de prueba. El resultado es consistente con lo observado en JMeter.

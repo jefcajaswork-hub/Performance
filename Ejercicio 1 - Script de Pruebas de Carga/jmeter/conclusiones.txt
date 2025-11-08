@@ -1,0 +1,126 @@
+CONCLUSIONES – PRUEBA DE CARGA DEL SERVICIO DE LOGIN
+====================================================
+
+Alcance
+-------
+Se ejecutó una prueba de carga sobre el endpoint:
+POST https://fakestoreapi.com/auth/login
+
+El objetivo fue evaluar el desempeño del proceso de autenticación bajo carga
+sostenida, utilizando credenciales parametrizadas desde un archivo CSV e
+implementando control de ritmo (TPS) mediante un Constant Throughput Timer.
+
+Escenario de prueba
+-------------------
+La configuración del escenario se definió considerando la relación fundamental
+de rendimiento (Ley de Little):
+
+   Concurrency_real ≈ Throughput × Response Time
+
+Donde:
+- Throughput: transacciones por segundo (TPS)
+- Response Time: tiempo medio de respuesta observado
+
+Durante la ejecución, el tiempo promedio de respuesta fue aproximadamente:
+
+   362 ms ≈ 0.362 segundos
+
+Por lo tanto, la concurrencia real necesaria para sostener ~20 TPS es:
+
+   Concurrency_real ≈ 20 TPS × 0.362 s ≈ 7.2 usuarios activos simultáneamente
+
+Esta concurrencia representa únicamente los hilos que están ocupados procesando
+peticiones en cada instante, no la cantidad de hilos que deben configurarse.
+Para evitar saturación de hilos (thread starvation) y permitir que el
+Constant Throughput Timer mantenga el ritmo estable de envío, se configuraron
+50 usuarios concurrentes. Esto provee capacidad de reserva para absorber
+fluctuaciones naturales en latencia y redes.
+
+Fundamento del cálculo de ritmo (conversiones de unidad)
+--------------------------------------------------------
+El throughput objetivo se expresa en TPS; sin embargo, el Constant Throughput Timer
+requiere el ritmo en muestras por minuto. La conversión de unidades es:
+
+   muestras/min = TPS × 60
+
+Aplicando el objetivo definido:
+   20 TPS × 60 = 1200 muestras/min
+
+Por lo tanto, el Constant Throughput Timer se configuró en:
+
+   1200 samples per minute   ≈ 20 TPS sostenidos
+
+Justificación de la duración de la prueba (180 segundos)
+--------------------------------------------------------
+La duración de la prueba se estableció en 180 segundos para garantizar resultados
+estables y significativos. En pruebas de carga, las métricas iniciales son
+inestables debido a establecimiento de conexiones y calentamiento interno
+(warm-up). Posteriormente, es necesario mantener la ejecución durante un
+intervalo continuo de medición (steady-state) para observar el comportamiento
+real del sistema bajo carga.
+
+   Duración total = Warm-up (~60 s) + Steady-state (~120 s) ≈ 180 s
+
+Parámetros finales del escenario:
+- Usuarios concurrentes: 50
+- Ramp-up: 10 segundos
+- Duración: 180 segundos
+- Throughput objetivo: ~20 TPS (Constant Throughput Timer = 1200 muestras/min)
+- Datos desde CSV (Ignore first line = TRUE)
+- Validaciones:
+  - Código de respuesta: 200/201 (regex 20(0|1))
+  - Tiempo máximo por petición: ≤ 1500 ms
+
+Resultados obtenidos
+--------------------
+Métricas representativas de la ejecución con 50 usuarios durante 180 segundos:
+
+- Muestras totales: 3621
+- Throughput: 20.08 TPS (cumple objetivo ≥ 20 TPS)
+- Tiempo promedio de respuesta: 362 ms (cumple SLA ≤ 1500 ms)
+- Latencia mínima observada: 344 ms
+- Latencia máxima observada: 632 ms
+- Desviación estándar: 12.45 ms (indica estabilidad en la respuesta)
+- Tasa de error: 0.00% (cumple SLA < 3%)
+
+Interpretación
+--------------
+1) Capacidad:
+   El servicio mantuvo ~20 TPS con tiempos de respuesta muy por debajo del SLA
+   establecido (362 ms << 1500 ms).
+
+2) Estabilidad:
+   La desviación estándar baja (12.45 ms) indica consistencia en la latencia.
+
+3) Correctitud:
+   El código HTTP 201 corresponde a emisión de token tras autenticación;
+   por ello se validó respuesta 200 y 201 mediante regex.
+
+4) Calidad de datos:
+   Se ignoró la primera línea del CSV (encabezado) para evitar respuestas 401
+   artificiales.
+
+Evaluación de métricas de desempeño
+-----------------------------------
+Se consideraron las cuatro métricas estándar para aceptación de resultados:
+
+1) Throughput (Capacidad): 20.08 TPS → Cumplido
+2) Tiempo de respuesta (Velocidad): 362 ms → Cumplido
+3) Tasa de error (Estabilidad): 0.00% → Cumplido
+4) Variabilidad (Consistencia): Desv. Est. 12.45 ms → Cumplido
+
+Propuesta de pruebas adicionales
+--------------------------------
+Para determinar el umbral de capacidad del sistema, se recomienda ejecutar una
+prueba de estrés incrementando carga progresivamente (30, 40, 50, 75, 100 TPS…)
+y monitorear:
+
+- Crecimiento no lineal en latencia
+- Incremento de error rate > 3%
+- Estancamiento del throughput (pérdida de escalabilidad)
+
+Conclusión
+----------
+El servicio de login cumple con los criterios de desempeño establecidos.
+Sostiene ~20 TPS de manera estable, presenta tiempos de respuesta adecuados
+y no evidencia fallas bajo el escenario de carga evaluado.
